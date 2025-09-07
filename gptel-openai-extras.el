@@ -278,25 +278,6 @@ parameters."
                               (:copier nil)
                               (:constructor gptel--make-deepseek)))
 
-(cl-defmethod gptel--parse-buffer :around ((_backend gptel-deepseek) _max-entries)
-  "Merge successive prompts in the prompts list that have the same role.
-
-The Deepseek API requires strictly alternating roles (user/assistant) in messages."
-  (let* ((prompts (cl-call-next-method))
-         (index prompts))
-    (prog1 prompts
-      (while index
-        (let ((p1 (car index))
-              (p2 (cadr index))
-              (rest (cdr index)))
-          (when (and p2 (equal (plist-get p1 :role)
-                               (plist-get p2 :role)))
-            (setf (plist-get p1 :content)
-                  (concat (plist-get p1 :content) "\n"
-                          (plist-get p2 :content)))
-            (setcdr index (cdr rest)))
-          (setq index (cdr index)))))))
-
 ;;;###autoload
 (cl-defun gptel-make-deepseek
     (name &key curl-args stream key request-params
