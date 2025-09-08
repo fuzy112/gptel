@@ -287,7 +287,7 @@ parameters."
           (protocol "https")
           (endpoint "/v1/chat/completions")
           (models '((deepseek-reasoner
-                     :capabilities (tool reasoning)
+                     :capabilities (reasoning)
                      :context-window 128
                      :input-cost 0.56
                      :output-cost 1.68)
