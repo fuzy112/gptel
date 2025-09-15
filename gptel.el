@@ -1804,9 +1804,9 @@ a tool, use `gptel-make-tool', which see."
 
 (cl-defstruct (gptel-tool (:constructor nil)
                           (:constructor gptel--make-tool-internal
-                                        (&key function name description args
-                                              async category confirm include
-                                              &allow-other-keys))
+                           (&key function name description args
+                                 async category confirm include
+                                 &allow-other-keys))
                           (:copier gptel--copy-tool))
   "Struct to specify tools for LLMs to run.
 
@@ -1822,7 +1822,7 @@ feed the LLM the results.  You can add tools via
   (async nil :type boolean :documentation "Whether the function runs asynchronously")
   (category nil :type string :documentation "Use to group tools by purpose")
   (confirm nil :type boolean :documentation "Seek confirmation before running tool?")
-  (include nil :type (or boolean function) :documentation "Include tool results in buffer?"))
+  (include nil :type boolean :documentation "Include tool results in buffer?"))
 
 (defun gptel--preprocess-tool-args (spec)
   "Convert symbol :type values in tool SPEC to strings destructively."
@@ -2420,12 +2420,8 @@ Run post-response hooks."
                           (plist-get args key)))
                       (gptel-tool-args tool-spec)))
                ;; Check if tool requires confirmation
-               (if (and gptel-confirm-tool-calls
-                        (or (eq gptel-confirm-tool-calls t)
-                            (let ((confirm (gptel-tool-confirm tool-spec)))
-                              (if (functionp confirm)
-                                  (apply confirm arg-values)
-                                confirm))))
+               (if (and gptel-confirm-tool-calls (or (eq gptel-confirm-tool-calls t)
+                                                     (gptel-tool-confirm tool-spec)))
                    (push (list tool-spec arg-values process-tool-result)
                          pending-calls)
                  ;; If not, run the tool
