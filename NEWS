@@ -49,6 +49,14 @@
   For logistical reasons, the =gptel-request= library will continue to
   be shipped with =gptel=.
 
+- New user option ~gptel-context~: This variable can be used to specify
+  additional context sources for gptel queries, usually files or
+  buffers.  It serves the longstanding requests of enabling buffer-local
+  context specification, as well as context specification in gptel
+  presets and programmatic gptel use.  Each entry is a file path or a
+  buffer object, but other kinds of specification are possible.  See its
+  documentation for details.
+
 - ~gptel-mcp-connect~ can now start MCP servers synchronously.  This
   is useful for scripting purposes, when MCP tools need to be
   available before performing other actions.  One common use is
@@ -57,6 +65,11 @@
 - "gitignored" files are omitted by default when adding files to gptel's
   context.  This setting can be controlled via the user option
   ~gptel-context-restrict-to-project-files~.
+
+- ~gptel-make-bedrock~ now checks for the ~AWS_BEARER_TOKEN_BEDROCK~ environment
+  variable parameter and uses it for Bedrock API key based authentication if
+  present. See
+  https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html.
 
 * 0.9.9 2025-08-02
 
