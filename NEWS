@@ -4,6 +4,10 @@
 
 ** Breaking changes
 
+- The model =claude-3-sonnet-20240229= has been removed from the default
+  list of Anthropic models.  This model is no longer available in the
+  Anthropic API.
+
 - The models =gemini-1.5-flash-8b=, =gemini-1.5-flash=,
   =gemini-1.5-pro-latest=, =gemini-2.0-flash-thinking-exp-01-21=,
   =gemini-2.0-flash-lite-preview-02-05=,
@@ -23,6 +27,10 @@
 
 ** New models and backends
 
+- GitHub Copilot backend: Add support for =gpt-5-codex= and =claude-sonnet-4.5=.
+
+- Add support for =claude-sonnet-4-5-20250929=.
+
 - Add support for =gemini-pro-latest=, =gemini-flash-latest= and
   =gemini-flash-lite-latest=.  These models point to the latest Gemini
   models of the corresponding type.
@@ -31,6 +39,30 @@
   =gemini-2.5-flash-lite-preview-09-2025=.
 
 ** New features and UI changes
+
+- gptel preset specifications can now modify the current values of gptel
+  options instead of replacing them, allowing better composition of
+  presets with your Emacs environment and with each other.
+
+  For example, it is common to want to add more LLM tools via a preset
+  to an existing set in gptel-tools.  To this end, add a small,
+  declarative DSL for use in gptel preset definitions.  For example, you
+  can now do the following:
+  #+begin_src emacs-lisp
+  (gptel-make-preset 'websearch
+    :tools '(:append ("search_web" "read_url")))
+  #+end_src
+  to add to the current list in ~gptel-tools~ instead of replacing it.
+  See the documentation of ~gptel-make-preset~ for more details.
+
+- You can now apply a preset from gptel's menu using ~completing-read~
+  instead of the menu.  This is bound to =@= in the presets menu, so
+  that =@ @= in gptel's menu will bring up the ~completing-read~
+  prompter.
+
+  This is an interim solution to the problem of the gptel presets menu
+  not scaling well to more than about 25 presets.  This menu is intended
+  to be redesigned eventually.
 
 - =gptel-request= is now a standalone library, independent of gptel
   and its UI.  This is intended
@@ -53,9 +85,16 @@
   additional context sources for gptel queries, usually files or
   buffers.  It serves the longstanding requests of enabling buffer-local
   context specification, as well as context specification in gptel
-  presets and programmatic gptel use.  Each entry is a file path or a
-  buffer object, but other kinds of specification are possible.  See its
-  documentation for details.
+  presets and programmatic gptel use.  As always, in a preset definition
+  this corresponds to the key with name of the variable with the
+  "gptel-" prefix stripped:
+  #+begin_src emacs-lisp
+  (gptel-make-preset 'with-docs
+    :context '("./README.md" "./README" "./README.org"))
+  #+end_src
+  Each entry in ~gptel-context~ is a file path or a buffer object, but
+  other kinds of specification are possible.  See its documentation for
+  details.
 
 - ~gptel-mcp-connect~ can now start MCP servers synchronously.  This
   is useful for scripting purposes, when MCP tools need to be
