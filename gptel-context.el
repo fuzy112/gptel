@@ -304,7 +304,8 @@ If CONTEXT is a directory, recursively removes all files in it."
     ;; FIXME: Quadratic cost when clearing a bunch of contexts at once
     (unless
         (cl-loop
-         for ov in (alist-get (current-buffer) gptel-context)
+         for ov in
+         (plist-get (alist-get (current-buffer) gptel-context) :overlays)
          thereis (overlay-start ov))
       (setf (alist-get (current-buffer) gptel-context nil 'remove) nil)))
    ((bufferp context)                   ;Full buffer
@@ -387,14 +388,14 @@ This modifies the buffer."
              (cl-etypecase gptel--system-message
                (string
                 (setq gptel--system-message
-                      (concat gptel--system-message "\n\n" context-string)))
+                      (concat context-string "\n\n" gptel--system-message)))
                (function
                 (setq gptel--system-message
                       (gptel--parse-directive gptel--system-message 'raw))
                 (gptel-context--wrap-in-buffer context-string))
                (list
                 (setq gptel--system-message ;cons a new list to avoid mutation
-                      (cons (concat (car gptel--system-message) "\n\n" context-string)
+                      (cons (concat context-string "\n\n" (car gptel--system-message))
                             (cdr gptel--system-message)))))
            (setq gptel--system-message context-string))))
       ('user
@@ -507,8 +508,8 @@ HEADER is an optional header to insert before the contents."
         ;; Collect bounds (already in position format)
         (when-let* ((bounds (plist-get context-data :bounds)))
           (if (consp (car bounds))
-              (nconc regions bounds)    ;((start1 . end1) (start2 . end2) ...)
-            (push bounds regions)))     ;(start1 . end1)
+              (setq regions (nconc regions bounds)) ;((start1 . end1) (start2 . end2) ...)
+            (push bounds regions)))                 ;(start1 . end1)
         ;; Collect lines (convert line numbers to positions)
         (when-let* ((line-bounds (plist-get context-data :lines)))
           ;; Convert singleton (start1 . end1) to ((start1 . end1))
@@ -618,6 +619,8 @@ context overlays, see `gptel-context'."
             nil t)
   (setq-local revert-buffer-function #'gptel-context--buffer-setup))
 
+;; FIXME(targeted-context): This does not handle :bounds and :lines.  Reuse
+;; `gptel-context--insert-buffer-string'?
 (defun gptel-context--buffer-setup (&optional _ignore-auto _noconfirm context-alist)
   "Set up the gptel context buffer.
 
@@ -640,10 +643,10 @@ CONTEXT-ALIST is the alist of contexts to use to populate the buffer."
           (if (length= contexts 0)
               (insert "There are no active gptel contexts.")
             (let (beg ov l1 l2)
-              (pcase-dolist (`(,buf . ,ovs) contexts)
+              (pcase-dolist (`(,buf . ,spec) contexts)
                 (cond
                  ((bufferp buf)
-                  (if (not ovs)     ;BUF is a full buffer, not specific overlays
+                  (if (not spec)      ;BUF is a full buffer, not specific ranges
                       (progn
                         (insert (propertize (format "In buffer %s:\n\n"
                                                     (buffer-name buf))
@@ -652,7 +655,7 @@ CONTEXT-ALIST is the alist of contexts to use to populate the buffer."
                         (insert-buffer-substring buf)
                         (insert "\n")
                         (setq ov (make-overlay beg (point))))
-                    (dolist (source-ov ovs) ;BUF is a buffer with some overlay(s)
+                    (dolist (source-ov (plist-get spec :overlays)) ;BUF is a buffer with some overlay(s)
                       (with-current-buffer buf
                         (setq l1 (line-number-at-pos (overlay-start source-ov))
                               l2 (line-number-at-pos (overlay-end source-ov))))
@@ -664,15 +667,15 @@ CONTEXT-ALIST is the alist of contexts to use to populate the buffer."
                        buf (overlay-start source-ov) (overlay-end source-ov))
                       (insert "\n")
                       (setq ov (make-overlay beg (point)))
-                      (overlay-put ov 'gptel-context source-ov)))
-                  (overlay-put ov 'gptel-overlay t)
-                  (overlay-put ov 'evaporate t)
+                      (overlay-put ov 'gptel-context source-ov)
+                      (overlay-put ov 'gptel-overlay t)
+                      (overlay-put ov 'evaporate t)))
                   (insert "\n" (make-separator-line) "\n"))
                  (t                     ;BUF is a file path, not a buffer
                   (insert (propertize (format "In file %s:\n\n" (file-name-nondirectory buf))
                                       'face 'bold))
                   (setq beg (point))
-                  (if-let* ((mime (plist-get ovs :mime))
+                  (if-let* ((mime (plist-get spec :mime))
                             ((not (string-match-p "^text/" mime)))) ;BUF is a binary file
                       (if-let* (((string-match-p (image-file-name-regexp) buf))
                                 (img (create-image buf)))

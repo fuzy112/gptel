@@ -668,7 +668,7 @@ which see for BEG, END and PRE."
           beg end `(gptel ,val front-sticky (gptel))))))
 
 (defun gptel-markdown--annotate-links (beg end)
-  "Annotate Markdown links whose sources are eligible to be sent with `gptel-send.'
+  "Annotate Markdown links whose sources will be sent with `gptel-send'.
 
 Search between BEG and END."
   (when gptel-track-media
@@ -1164,9 +1164,9 @@ No state transition here since that's handled by the process sentinels."
          (marker-position start-marker) (marker-position tracking-marker))))))
 
 (defun gptel--handle-error (fsm)
-  "Check for errors in request state FSM perform UI updates.
+  "Check for errors in request state FSM.
 
-Run post-response hooks."
+Perform UI updates and run post-response hooks."
   (when-let* ((info (gptel-fsm-info fsm))
               (error-data (plist-get info :error))
               (http-msg   (plist-get info :status))
@@ -1855,11 +1855,11 @@ one.
 PRE and POST are functions to run before and after the preset is
 applied.  They take no arguments.
 
-BACKEND is the gptel-backend to set, or its name (like \"ChatGPT\").
+BACKEND is the `gptel-backend' to set, or its name (like \"ChatGPT\").
 
-MODEL is the gptel-model, a symbol.
+MODEL is the `gptel-model', a symbol.
 
-SYSTEM is the directive. It can be
+SYSTEM is the directive.  It can be
 - the system message (a string),
 - a list of strings (a conversation template)
 - or a function (dynamic system message).
@@ -1871,7 +1871,7 @@ TOOLS is a list of gptel tools or tool names, like
 Recognized keys are not limited to the above.  Any other key (like
 `:foo') corresponds to the value of either `gptel-foo' (preferred) or
 `gptel--foo'.
-- So TOOLS corresponds to `gptel-tools',
+- So TOOLS corresponds to option `gptel-tools',
 - CONFIRM-TOOL-CALLS to `gptel-confirm-tool-calls',
 - TEMPERATURE to `gptel-temperature' and so on.
 See gptel's customization options for all available settings.
@@ -1884,16 +1884,51 @@ it.  For example,
     :system \"Use the provided tools to search the web
               for up-to-date information\")
 
-will replace the currently active `gptel-tools' and the system message.
-Alternatively, you can specify that the specified values should be
-appended or prepended to the existing values instead of replacing it.
-This can be done by specifying the value as a plist instead with the
-keys `:prepend' or `:append'.
+will replace the currently active option `gptel-tools' and the system
+message.
+
+Alternatively,
+
+- You can require that the value be appended or prepended to the
+  existing value instead of replacing it.  This can be done by
+  specifying the value as a plist instead with the keys `:prepend' or
+  `:append'.
 
   (gptel-make-preset \\='websearch
     :tools  \\='(:append (\"search_web\" \"read_url\"))
     :system \\='(:prepend \"Use the provided tools to search the web
-                        for up-to-date information.\"))"
+                        for up-to-date information.\"))
+
+- You can dynamically compute the value for a key at the time the preset
+  is applied with `:eval' or `:function'.  This is mostly useful when
+  using presets in the prompt, as @preset-name.
+
+  An `:eval' form is evaluated when the preset is applied:
+
+  (gptel-make-preset \\='visible-buffers
+    :description \"Include the full text of all buffers visible in the
+                 frame.\"
+    :context \\='(:eval (mapcar #\\='window-buffer (window-list))))
+    ▲                ▲
+    │                ╰╴evaluated when preset is applied
+    ╰╴sets `gptel-context'
+
+  `:function' should take the current value of the key as an input and
+  return the new value.  Here we combine it with `:append' in the plist.
+
+  (gptel-make-preset \\='github-read-only
+    :description \"Provide read-only GitHub tools\"
+    :pre (lambda () (gptel-mcp-connect \\='(\"github\") \\='sync))
+    :tools
+    \\='( :append (\"mcp-github\")       ;Adds all github MCP tools
+       :function (lambda (tools)
+                   (cl-delete-if    ;Remove \"write\" access to GitHub
+                    (lambda (tool)
+                      (string-match-p \"create_\" (gptel-tool-name tool)))
+                    tools))))
+
+  NOTE: `:eval' and `:function' are evaluated in a temporary buffer, and
+  not the buffer from which the request is sent."
   (declare (indent 1))
   (if-let* ((p (assoc name gptel--known-presets)))
       (setcdr p keys)
@@ -1909,7 +1944,7 @@ keys `:prepend' or `:append'.
 
 NAME must be a symbol.  DESCRIPTION is added if provided.  In addition
 to registering the preset, elisp code to do the same is copied to the
-kill-ring."
+`kill-ring'."
   (interactive
    (list (intern (completing-read "Save gptel settings to (existing or new) preset: "
                                   gptel--known-presets))
@@ -1952,7 +1987,7 @@ defaults to `set', and can be set to a different function to (for
 example) apply the preset buffer-locally."
   (when (memq (type-of preset) '(string symbol))
     (let ((spec (or (gptel-get-preset preset)
-                    (user-error "gptel preset \"%s\": Cannot find preset."
+                    (user-error "gptel preset \"%s\": Cannot find preset"
                                 preset))))
       (setq preset spec)))
   (unless setter (setq setter #'set))
@@ -1972,7 +2007,7 @@ example) apply the preset buffer-locally."
             ;; TODO(modify-list): Catch other incompatible combinations
             (and (or (plist-member val :append) (plist-member val :prepend))
                  (not (stringp (symbol-value sym)))
-                 (user-error "Composing non-string system messages is not implemented."))
+                 (user-error "Composing non-string system messages is not implemented"))
             (setq val (gptel--modify-value (symbol-value sym) val)))
           (if (and (symbolp val) (not (functionp val)))
               (if-let* ((directive (alist-get val gptel-directives)))
@@ -1980,11 +2015,12 @@ example) apply the preset buffer-locally."
                 (user-error "gptel preset: Cannot find directive %s" val))
             (funcall setter sym val))))
        (:backend
+        (when (consp val) (setq val (gptel--modify-value 'gptel-backend val)))
         (setq val (cl-etypecase val
                     (gptel-backend val)
                     (string (gptel-get-backend val))))
         (unless val
-          (user-error "gptel preset: Cannot find backend %s." val))
+          (user-error "gptel preset: Cannot find backend %s" val))
         (funcall setter 'gptel-backend val))
        (:tools                          ;TEMP Confirm this `:append' convention
         (setq val (gptel--modify-value gptel-tools val))
@@ -1996,7 +2032,7 @@ example) apply the preset buffer-locally."
                                        (string (ignore-errors
                                                  (gptel-get-tool tool-name))))
                           do (unless tool
-                               (user-error "gptel preset: Cannot find tool %s." val))
+                               (user-error "gptel preset: Cannot find tool %s" val))
                           collect tool))))
           (funcall setter 'gptel-tools (cl-delete-duplicates tools :test #'eq))))
        ((and (let sym (or (intern-soft
@@ -2020,7 +2056,7 @@ PRESET is the name of a preset, or a spec (plist) of the form
  (:KEY1 VAL1 :KEY2 VAL2 ...)."
   (when (memq (type-of preset) '(string symbol))
     (let ((spec (or (gptel-get-preset preset)
-                    (user-error "gptel preset \"%s\": Cannot find preset."
+                    (user-error "gptel preset \"%s\": Cannot find preset"
                                 preset))))
       (setq preset spec)))
   (let* ((index preset)
@@ -2226,7 +2262,7 @@ context for the ediff session."
     (goto-char beg) (push-mark) (goto-char end) (activate-mark)))
 
 (defun gptel--previous-variant (&optional arg)
-  "Switch to previous gptel-response at this point, if it exists."
+  "Switch to ARG previous gptel-response at this point, if it exists."
   (interactive "p")
   (pcase-let* ((`(,beg . ,end) (gptel--get-response-bounds))
                (history (get-char-property (point) 'gptel-history))
@@ -2252,7 +2288,7 @@ context for the ediff session."
     (pulse-momentary-highlight-region beg (+ beg (length alt-response)))))
 
 (defun gptel--next-variant (&optional arg)
-  "Switch to next gptel-response at this point, if it exists."
+  "Switch to ARG next gptel-response at this point, if it exists."
   (interactive "p")
   (gptel--previous-variant (- arg)))
 
