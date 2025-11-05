@@ -697,92 +697,99 @@ Search between BEG and END."
         (and link-ovs (mapc #'delete-overlay link-ovs))))
     `(jit-lock-bounds ,beg . ,end)))
 
-(defun gptel-use-header-line ()
-  "Set up the header-line for a gptel buffer."
-  (setq
-   header-line-format
-   (list
-    '(:eval (concat (propertize " " 'display '(space :align-to 0))
-                    (format "%s" (gptel-backend-name gptel-backend))))
-    (propertize " Ready" 'face 'success)
-    '(:eval
-      (let* ((model (gptel--model-name gptel-model))
-             (system
-              (propertize
-               (buttonize
-                (format "[Prompt: %s]"
-                        (or (car-safe (rassoc gptel--system-message gptel-directives))
-                            (gptel--describe-directive gptel--system-message 15)))
-                (lambda (&rest _) (gptel-system-prompt)))
-               'mouse-face 'highlight
-               'help-echo "System message for session"))
-             (context
-              (and gptel-context
-                   (cl-loop
-                    for entry in gptel-context
-                    if (bufferp (or (car-safe entry) entry)) count it into bufs
-                    else count (stringp (or (car-safe entry) entry)) into files
-                    finally return
-                    (propertize
-                     (buttonize
-                      (concat "[Context: "
-                              (and (> bufs 0) (format "%d buf" bufs))
-                              (and (> bufs 1) "s")
-                              (and (> bufs 0) (> files 0) ", ")
-                              (and (> files 0) (format "%d file" files))
-                              (and (> files 1) "s")
-                              "]")
-                      (lambda (&rest _)
-                        (require 'gptel-context)
-                        (gptel-context--buffer-setup)))
-                     'mouse-face 'highlight
-                     'help-echo "Active gptel context"))))
-             (toggle-track-media
-              (lambda (&rest _)
-                (setq-local gptel-track-media (not gptel-track-media))
-                (if gptel-track-media
-                    (progn
-                      (run-hooks 'gptel-refresh-buffer-hook)
-                      (message "Sending media from included links."))
-                  (without-restriction (gptel--annotate-link-clear))
-                  (message "Ignoring links.  Only link text will be sent."))
-                (run-at-time 0 nil #'force-mode-line-update)))
-             (track-media
-              (and (gptel--model-capable-p 'media)
-                   (if gptel-track-media
-                       (propertize
-                        (buttonize "[Sending media]" toggle-track-media)
-                        'mouse-face 'highlight
-                        'help-echo
-                        "Sending media from links/urls when supported.\nClick to toggle")
+(defvar gptel--header-line-info
+  '(:eval
+    (let* ((model (gptel--model-name gptel-model))
+           (system
+            (propertize
+             (buttonize
+              (format "[Prompt: %s]"
+                      (or (car-safe (rassoc gptel--system-message gptel-directives))
+                          (gptel--describe-directive gptel--system-message 15)))
+              (lambda (&rest _) (gptel-system-prompt)))
+             'mouse-face 'highlight
+             'help-echo "System message for session"))
+           (context
+            (and gptel-context
+                 (cl-loop
+                  for entry in gptel-context
+                  if (bufferp (or (car-safe entry) entry)) count it into bufs
+                  else count (stringp (or (car-safe entry) entry)) into files
+                  finally return
+                  (propertize
+                   (buttonize
+                    (concat "[Context: "
+                            (and (> bufs 0) (format "%d buf" bufs))
+                            (and (> bufs 1) "s")
+                            (and (> bufs 0) (> files 0) ", ")
+                            (and (> files 0) (format "%d file" files))
+                            (and (> files 1) "s")
+                            "]")
+                    (lambda (&rest _)
+                      (require 'gptel-context)
+                      (gptel-context--buffer-setup)))
+                   'mouse-face 'highlight
+                   'help-echo "Active gptel context"))))
+           (toggle-track-media
+            (lambda (&rest _)
+              (setq-local gptel-track-media (not gptel-track-media))
+              (if gptel-track-media
+                  (progn
+                    (run-hooks 'gptel-refresh-buffer-hook)
+                    (message "Sending media from included links."))
+                (without-restriction (gptel--annotate-link-clear))
+                (message "Ignoring links.  Only link text will be sent."))
+              (run-at-time 0 nil #'force-mode-line-update)))
+           (track-media
+            (and (gptel--model-capable-p 'media)
+                 (if gptel-track-media
                      (propertize
-                      (buttonize "[Ignoring media]" toggle-track-media)
+                      (buttonize "[Sending media]" toggle-track-media)
                       'mouse-face 'highlight
                       'help-echo
-                      "Ignoring media from links/urls.\nClick to toggle"))))
-             (toggle-tools (lambda (&rest _) (interactive)
-                             (run-at-time 0 nil
-                                          (lambda () (call-interactively #'gptel-tools)))))
-             (tools (when (and gptel-use-tools gptel-tools)
-                      (propertize
-                       (buttonize (pcase (length gptel-tools)
-                                    (0 "[No tools]") (1 "[1 tool]")
-                                    (len (format "[%d tools]" len)))
-                                  toggle-tools)
-                       'mouse-face 'highlight
-                       'help-echo "Select tools"))))
-        (concat
-         (propertize
-          " " 'display
-          `(space :align-to (- right
-                               ,(+ 5 (length model) (length system)
-                                   (length track-media) (length context) (length tools)))))
-         tools (and track-media " ") track-media (and context " ") context " " system " "
-         (propertize
-          (buttonize (concat "[" model "]")
-                     (lambda (&rest _) (gptel-menu)))
-          'mouse-face 'highlight
-          'help-echo "Model in use")))))))
+                      "Sending media from links/urls when supported.\nClick to toggle")
+                   (propertize
+                    (buttonize "[Ignoring media]" toggle-track-media)
+                    'mouse-face 'highlight
+                    'help-echo
+                    "Ignoring media from links/urls.\nClick to toggle"))))
+           (toggle-tools (lambda (&rest _) (interactive)
+                           (run-at-time 0 nil
+                                        (lambda () (call-interactively #'gptel-tools)))))
+           (tools (when (and gptel-use-tools gptel-tools)
+                    (propertize
+                     (buttonize (pcase (length gptel-tools)
+                                  (0 "[No tools]") (1 "[1 tool]")
+                                  (len (format "[%d tools]" len)))
+                                toggle-tools)
+                     'mouse-face 'highlight
+                     'help-echo "Select tools"))))
+      (concat
+       (propertize
+        " " 'display
+        `(space :align-to (- right
+                             ,(+ 5 (length model) (length system)
+                                 (length track-media) (length context) (length tools)))))
+       tools (and track-media " ") track-media (and context " ") context " " system " "
+       (propertize
+        (buttonize (concat "[" model "]")
+                   (lambda (&rest _) (gptel-menu)))
+        'mouse-face 'highlight
+        'help-echo "Model in use"))))
+  "Information segment for the header-line in gptel-mode.")
+
+(defun gptel-use-header-line ()
+  "Set up the header-line for a gptel buffer.
+
+It is composed of three segments: the backend name, the
+status (Ready/Waiting etc) and the info segment, showing the current
+context, tools, system prompt, model and more."
+  (setq
+   header-line-format
+   (list '(:eval (concat (propertize " " 'display '(space :align-to 0))
+                         (format "%s" (gptel-backend-name gptel-backend))))
+         (propertize " Ready" 'face 'success)
+         gptel--header-line-info)))
 
 ;;;###autoload
 (define-minor-mode gptel-mode
@@ -1007,7 +1014,7 @@ buffers."
     (ERRS ,#'gptel--handle-error ,#'gptel--fsm-last)
     (TOOL ,#'gptel--update-tool-call ,#'gptel--handle-tool-use ,#'gptel--update-tool-ask)
     (DONE ,#'gptel--handle-post-insert ,#'gptel--fsm-last)
-    (ABRT ,#'gptel--update-abort))
+    (ABRT ,#'gptel--handle-abort))
   "Alist specifying handlers for `gptel-send' state transitions.
 
 See `gptel-request--handlers' for details.")
@@ -1142,6 +1149,22 @@ No state transition here since that's handled by the process sentinels."
                               start-marker))
          ;; start-marker may have been moved if :buffer was read-only
          (gptel-buffer (marker-buffer start-marker)))
+    ;; Run hook in visible window to set window-point, BUG #269
+    (if-let* ((gptel-window (get-buffer-window gptel-buffer 'visible)))
+        (with-selected-window gptel-window
+          (mapc (lambda (f) (funcall f (marker-position start-marker)
+                                (marker-position tracking-marker)))
+                (plist-get info :post))
+          (run-hook-with-args
+           'gptel-post-response-functions
+           (marker-position start-marker) (marker-position tracking-marker)))
+      (with-current-buffer gptel-buffer
+        (mapc (lambda (f) (funcall f (marker-position start-marker)
+                              (marker-position tracking-marker)))
+              (plist-get info :post))
+        (run-hook-with-args
+         'gptel-post-response-functions
+         (marker-position start-marker) (marker-position tracking-marker))))
     (with-current-buffer gptel-buffer
       (if (not tracking-marker)         ;Empty response
           (when gptel-mode (gptel--update-status " Empty response" 'success))
@@ -1151,17 +1174,7 @@ No state transition here since that's handled by the process sentinels."
             (save-excursion (goto-char tracking-marker)
                             (insert gptel-response-separator
                                     (gptel-prompt-prefix-string))))
-          (gptel--update-status  " Ready" 'success))))
-    ;; Run hook in visible window to set window-point, BUG #269
-    (if-let* ((gptel-window (get-buffer-window gptel-buffer 'visible)))
-        (with-selected-window gptel-window
-          (run-hook-with-args
-           'gptel-post-response-functions
-           (marker-position start-marker) (marker-position tracking-marker)))
-      (with-current-buffer gptel-buffer
-        (run-hook-with-args
-         'gptel-post-response-functions
-         (marker-position start-marker) (marker-position tracking-marker))))))
+          (gptel--update-status  " Ready" 'success))))))
 
 (defun gptel--handle-error (fsm)
   "Check for errors in request state FSM.
@@ -1183,19 +1196,50 @@ Perform UI updates and run post-response hooks."
         (setq http-msg (concat "("  http-msg ") " (string-trim error-type))))
       (when-let* ((error-msg (plist-get error-data :message)))
         (message "%s error: (%s) %s" backend-name http-msg (string-trim error-msg))))
-    (with-current-buffer gptel-buffer
-      (when gptel-mode
-        (gptel--update-status
-         (format " Error: %s" http-msg) 'error)))
     (if-let* ((gptel-window (get-buffer-window gptel-buffer 'visible)))
         (with-selected-window gptel-window
+          (mapc (lambda (f) (funcall f (marker-position start-marker)
+                                (marker-position tracking-marker)))
+                (plist-get info :post))
           (run-hook-with-args
            'gptel-post-response-functions
            (marker-position start-marker) (marker-position tracking-marker)))
       (with-current-buffer gptel-buffer
+        (mapc (lambda (f) (funcall f (marker-position start-marker)
+                              (marker-position tracking-marker)))
+              (plist-get info :post))
         (run-hook-with-args
          'gptel-post-response-functions
-         (marker-position start-marker) (marker-position tracking-marker))))))
+         (marker-position start-marker) (marker-position tracking-marker))))
+    (with-current-buffer gptel-buffer
+      (when gptel-mode
+        (gptel--update-status
+         (format " Error: %s" http-msg) 'error)))))
+
+(defun gptel--handle-abort (fsm)
+  "Perform UI update on `gptel-abort' for FSM."
+  (when-let* ((info (gptel-fsm-info fsm))
+              (gptel-buffer (plist-get info :buffer))
+              (start-marker (plist-get info :position))
+              (tracking-marker (or (plist-get info :tracking-marker)
+                                   start-marker)))
+    (if-let* ((gptel-window (get-buffer-window gptel-buffer 'visible)))
+        (with-selected-window gptel-window
+          (mapc (lambda (f) (funcall f (marker-position start-marker)
+                                (marker-position tracking-marker)))
+                (plist-get info :post))
+          (run-hook-with-args
+           'gptel-post-response-functions
+           (marker-position start-marker) (marker-position tracking-marker)))
+      (with-current-buffer gptel-buffer
+        (mapc (lambda (f) (funcall f (marker-position start-marker)
+                              (marker-position tracking-marker)))
+              (plist-get info :post))
+        (run-hook-with-args
+         'gptel-post-response-functions
+         (marker-position start-marker) (marker-position tracking-marker))))
+    (with-current-buffer gptel-buffer
+      (when gptel-mode (gptel--update-status  " Abort" 'error)))))
 
 (defun gptel--update-wait (fsm)
   "Update gptel's status after sending a request."
@@ -1206,21 +1250,16 @@ Perform UI updates and run post-response hooks."
 (defun gptel--update-tool-call (fsm)
   "Update gptel's status when calling a tool."
   (with-current-buffer (plist-get (gptel-fsm-info fsm) :buffer)
+    (setq gptel--fsm-last fsm)
     (when gptel-mode
       (gptel--update-status " Calling tool..." 'mode-line-emphasis))))
 
 (defun gptel--update-tool-ask (fsm)
   "Update gptel's status when there are pending tool calls."
   (when (plist-get (gptel-fsm-info fsm) :tool-pending)
-    (setq gptel--fsm-last fsm)
     (plist-put (gptel-fsm-info fsm) :tool-pending nil)
     (when gptel-mode
       (gptel--update-status " Run tools?" 'mode-line-emphasis))))
-
-(defun gptel--update-abort (fsm)
-  "Update gptel's status when aborting a request."
-  (with-current-buffer (plist-get (gptel-fsm-info fsm) :buffer)
-    (when gptel-mode (gptel--update-status  " Abort" 'error))))
 
 
 ;;; Send queries, handle responses
@@ -1723,9 +1762,11 @@ for tool call results.  INFO contains the state of the request."
                     (display-call (format "(%s %s)" name
                                           (string-trim (prin1-to-string args) "(" ")")))
                     (call (prin1-to-string `(:name ,name :args ,args)))
-                    (truncated-call (truncate-string-to-width
-                                     display-call
-                                     (floor (* (window-width) 0.6)) 0 nil " ...)")))
+                    (truncated-call
+                     (string-replace "\n" " "
+                                     (truncate-string-to-width
+                                      display-call
+                                      (floor (* (window-width) 0.6)) 0 nil " ...)"))))
                (if (derived-mode-p 'org-mode)
                    (concat
                     separator

@@ -723,8 +723,8 @@ For files, spec can include buffer spans and line number ranges, as well as
 the MIME type of the file:
 
   (\"/path/to/file\" :bounds ((start1 . end1) (start2 . end2) ...)
-                     :lines  ((from1 . to1) (from2 . end2) ...)
-                     :mime \"image/png\")
+                   :lines  ((from1 . to1) (from2 . end2) ...)
+                   :mime \"image/png\")
 
 gptel tries to guess file MIME types, but is not always successful, so
 it is recommended to provide it with non-text files.
@@ -1065,10 +1065,9 @@ The result is a string intended for display.  Newlines are
 replaced with REPLACEMENT."
   (cl-typecase directive
     (string
-     (concat
-      (string-replace "\n" (or replacement " ")
-                      (truncate-string-to-width
-                       directive width nil nil t))))
+     (string-replace
+      "\n" (or replacement " ")
+      (substring directive 0 (min width (length directive)))))
     (function
      (concat
       "λ: "
@@ -2082,6 +2081,7 @@ Initiate the request when done."
           (gptel--inject-media gptel-backend full-prompt))
         (unless stream (cl-remf info :stream))
         (plist-put info :backend gptel-backend)
+        (plist-put info :model gptel-model)
         (when gptel-include-reasoning   ;Required for next-request-only scope
           (plist-put info :include-reasoning gptel-include-reasoning))
         (when (and gptel-use-tools gptel-tools)
@@ -2240,7 +2240,7 @@ first nil value in REST is guaranteed to be correct."
     (if-let* ((path (nth 3 link))
               (prefix (or (string-search "://" path) 0))
               (link-type (if (= prefix 0) "file" (substring path 0 prefix)))
-              (path (if (equal link-type "file")
+              (path (if (and (equal link-type "file") (> prefix 0))
                         (substring path (+ prefix 3)) path))
               (resource-type
                (or (and (equal link-type "file") 'file)
@@ -2370,13 +2370,16 @@ the response is inserted into the current buffer after point."
   (let* ((inhibit-message t)
          (message-log-max nil)
          (url-request-method "POST")
+         (info (gptel-fsm-info fsm))
+         ;; We have to let-bind the following two since their dynamic
+         ;; values are used for key lookup and url resolution
+         (gptel-backend (plist-get info :backend))
+         (gptel-model (plist-get info :model))
          (url-request-extra-headers
           (append '(("Content-Type" . "application/json"))
                   (when-let* ((header (gptel-backend-header gptel-backend)))
                     (if (functionp header)
                         (funcall header) header))))
-         (info (gptel-fsm-info fsm))
-         (backend (plist-get info :backend))
          (callback (or (plist-get info :callback) ;if not the first run
                        #'gptel--insert-response)) ;default callback
          ;; NOTE: We don't need the decode-coding-string dance here since we
@@ -2398,14 +2401,13 @@ the response is inserted into the current buffer after point."
     (let ((proc-buf
            (url-retrieve (let ((backend-url (gptel-backend-url gptel-backend)))
                            (if (functionp backend-url)
-                               (with-current-buffer (plist-get info :buffer)
-                                 (funcall backend-url))
-                             backend-url))
+                               (funcall backend-url) backend-url))
                          (lambda (_)
                            (set-buffer-multibyte t)
                            (set-buffer-file-coding-system 'utf-8-unix)
                            (pcase-let ((`(,response ,http-status ,http-msg ,error)
-                                        (gptel--url-parse-response backend info))
+                                        (gptel--url-parse-response
+                                         (plist-get info :backend) info))
                                        (buf (current-buffer)))
                              (plist-put info :http-status http-status)
                              (plist-put info :status http-msg)
@@ -2498,15 +2500,14 @@ See `gptel-curl--get-response' for its contents.")
 
 INFO contains the request data, TOKEN is a unique identifier."
   (let* ((data (plist-get info :data))
-         ;; We have to let-bind the following two variables since their dynamic
-         ;; values are used for key lookup and url resoloution
+         ;; We have to let-bind the following three since their dynamic
+         ;; values are used for key lookup and url resolution
          (gptel-backend (plist-get info :backend))
+         (gptel-model (plist-get info :model))
          (gptel-stream (plist-get info :stream))
          (url (let ((backend-url (gptel-backend-url gptel-backend)))
                 (if (functionp backend-url)
-                    (with-current-buffer (plist-get info :buffer)
-                      (funcall backend-url))
-                  backend-url)))
+                    (funcall backend-url) backend-url)))
          (data-json (decode-coding-string (gptel--json-encode data) 'utf-8 t))
          (headers
           (append '(("Content-Type" . "application/json"))
@@ -2529,7 +2530,9 @@ INFO contains the request data, TOKEN is a unique identifier."
      (if (length< data-json gptel-curl-file-size-threshold)
          (list (format "-d%s" data-json))
        (letrec
-           ((temp-filename (make-temp-file "gptel-curl-data" nil ".json" data-json))
+           ((write-region-inhibit-fsync t)
+            (file-name-handler-alist nil)
+            (temp-filename (make-temp-file "gptel-curl-data" nil ".json" data-json))
             (cleanup-fn (lambda (&rest _)
                           (when (file-exists-p temp-filename)
                             (delete-file temp-filename)
