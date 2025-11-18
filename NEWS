@@ -1,5 +1,24 @@
 # -*- mode: org; -*-
 
+* 0.9.9.5-pre
+
+** Breaking changes
+
+- =gptel-track-media= now controls whether links to media files are
+  tracked /only/ in chat buffers.  Previously it also controlled
+  whether media files added to the context explicitly via
+  =gptel-add-file= were sent.  This is considered a bug and has now
+  been fixed.
+
+** New models and backends
+
+** New features and UI changes
+
+- When redirecting LLM responses to the kill ring or echo area, gptel
+  now omits tool call results, as these tend to be very noisy.  Kill
+  ring redirection now correctly captures the full response from the
+  LLM, including pre- and post-tool-call text.
+
 * 0.9.9.3
 
 ** Breaking changes

@@ -2088,8 +2088,7 @@ Initiate the request when done."
         ;; irrespective of the preference in `gptel-use-context'.  This is
         ;; because media cannot be included (in general) with system messages.
         ;; TODO(augment): Find a way to do this in the prompt-buffer?
-        (when (and gptel-context gptel-use-context
-                   gptel-track-media (gptel--model-capable-p 'media))
+        (when (and gptel-context gptel-use-context (gptel--model-capable-p 'media))
           (gptel--inject-media gptel-backend full-prompt))
         (unless stream (cl-remf info :stream))
         (plist-put info :backend gptel-backend)
@@ -2771,7 +2770,8 @@ PROCESS and _STATUS are process parameters."
                   (unless reasoning-block ;Record that we're in a reasoning block (#709)
                     (plist-put proc-info :reasoning-block 'in))
                   (plist-put proc-info :reasoning nil)) ;Reset for next parsing round
-                 ((string-blank-p response)) ;Defer checking if response is blank
+                 ((and (string-blank-p response) ;Defer checking if response is blank
+                       (not reasoning-block))) ;unless we're in a reasoning block already
                  ((and (null reasoning-block) (length> response 0))
                   ;; Obtained from main response stream: reasoning block start
                   (if-let*  ((idx (string-match-p "<think>" response)))
