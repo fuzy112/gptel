@@ -1802,8 +1802,8 @@ for tool call results.  INFO contains the state of the request."
          (tool-marker (plist-get info :tool-marker))
          (tracking-marker (plist-get info :tracking-marker)))
     ;; Insert tool results
-    (when gptel-include-tool-results
-      (with-current-buffer (marker-buffer start-marker)
+    (with-current-buffer (marker-buffer start-marker)
+      (when gptel-include-tool-results
         (cl-loop
          for (tool args result) in tool-results
          with include-names =
@@ -1867,9 +1867,9 @@ for tool call results.  INFO contains the state of the request."
          (unless tracking-marker
            (setq tracking-marker (plist-get info :tracking-marker)))
          (if tool-marker
-               (move-marker tool-marker tracking-marker)
-             (setq tool-marker (copy-marker tracking-marker nil))
-             (plist-put info :tool-marker tool-marker))
+             (move-marker tool-marker tracking-marker)
+           (setq tool-marker (copy-marker tracking-marker nil))
+           (plist-put info :tool-marker tool-marker))
          (ignore-errors                 ;fold drawer
            (save-excursion
              (goto-char tracking-marker)
@@ -2134,7 +2134,7 @@ example) apply the preset buffer-locally."
   (unless setter (setq setter #'set))
   (when-let* ((func (plist-get preset :pre))) (funcall func))
   (when-let* ((parents (plist-get preset :parents)))
-    (mapc #'gptel--apply-preset (ensure-list parents)))
+    (mapc (lambda (parent) (gptel--apply-preset parent setter)) (ensure-list parents)))
   (map-do
    (lambda (key val)
      (pcase key
@@ -2209,8 +2209,7 @@ PRESET is the name of a preset, or a spec (plist) of the form
         ((or :description :pre :post))
         (:parents
          (mapc (lambda (parent-preset)
-                 (nconc syms (gptel--preset-syms
-                              (gptel-get-preset parent-preset))))
+                 (nconc syms (gptel--preset-syms parent-preset)))
                (ensure-list val)))
         (:system (push 'gptel--system-message syms))
         (_ (if-let* ((var (or (intern-soft
