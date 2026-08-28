@@ -502,7 +502,10 @@ examples.  Once registered, backends may be retrieved using
                                                     (repeat symbol)))))
       (cons :tag "(BACKEND-TYPE . PLIST)" ;accommodate (gptel-openai :name "chatgpt" . plist)
             ,types (plist :value-type (choice string symbol function
-                                              (repeat symbol))))))
+                                              (repeat symbol))))
+      ,@(mapcar (lambda (name) (list 'const :tag name name))
+               (delq nil (mapcar #'car gptel--known-backends)))
+      (string :tag "Known backend")))
   :get
   (lambda (sym)
     (when-let* ((backend (default-toplevel-value sym))
@@ -525,6 +528,7 @@ examples.  Once registered, backends may be retrieved using
     (let ((setter (if buffer-local #'set-local #'set-default-toplevel-value)))
       (cond
        ((null val) (funcall setter sym val))
+       ((stringp val) (funcall setter sym (gptel-get-backend val)))
        ((listp val)
         (let* ((name (if (stringp (cadr val)) ;explicit and implicit :name specification
                          (cadr val) (plist-get (cdr val) :name)))
